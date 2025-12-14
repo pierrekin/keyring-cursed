@@ -47,7 +47,11 @@ use thiserror::Error;
 pub enum Error {
     /// The underlying keyring operation failed.
     #[error("keyring error: {0}")]
-    Keyring(#[from] keyring::Error),
+    Keyring(keyring::Error),
+
+    /// The requested entry does not exist.
+    #[error("no entry found")]
+    NoEntry,
 
     /// The stored secret has invalid or corrupted format.
     #[error("corrupted secret: {0}")]
@@ -64,6 +68,14 @@ pub enum Error {
 
 /// A Result type alias using our Error type.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Convert a keyring error to our Error type, handling NoEntry specially.
+pub(crate) fn convert_keyring_error(err: keyring::Error) -> Error {
+    match err {
+        keyring::Error::NoEntry => Error::NoEntry,
+        other => Error::Keyring(other),
+    }
+}
 
 /// Returns the maximum payload size per chunk for the current platform.
 ///
