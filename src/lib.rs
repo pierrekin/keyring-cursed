@@ -70,7 +70,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Convert a keyring error to our Error type, handling NoEntry specially.
-fn convert_keyring_error(err: keyring::Error) -> Error {
+pub(crate) fn convert_keyring_error(err: keyring::Error) -> Error {
     match err {
         keyring::Error::NoEntry => Error::NoEntry,
         other => Error::Keyring(other),
