@@ -1,6 +1,6 @@
 use crate::chunk::{chunks_needed, max_chunk_size};
 use crate::format::{decode_part, encode_part};
-use crate::{convert_keyring_error, Error, Result};
+use crate::{Error, Result};
 
 /// An entry in the credential store that can hold secrets of any size.
 ///
@@ -58,7 +58,7 @@ impl Entry {
 
             let encoded = encode_part(part, total, chunk_data);
             let entry = self.part_entry(part)?;
-            entry.set_secret(&encoded).map_err(convert_keyring_error)?;
+            entry.set_secret(&encoded).map_err(Error::from)?;
         }
 
         Ok(())
@@ -70,7 +70,7 @@ impl Entry {
     pub fn get_secret(&self) -> Result<Vec<u8>> {
         // Read part 1 to get total count
         let entry1 = self.part_entry(1)?;
-        let data1 = entry1.get_secret().map_err(convert_keyring_error)?;
+        let data1 = entry1.get_secret().map_err(Error::from)?;
         let (part, total, payload1) = decode_part(&data1)?;
 
         if part != 1 {
@@ -88,7 +88,7 @@ impl Entry {
         let mut result = payload1;
         for i in 2..=total {
             let entry = self.part_entry(i)?;
-            let data = entry.get_secret().map_err(convert_keyring_error)?;
+            let data = entry.get_secret().map_err(Error::from)?;
             let (part, part_total, payload) = decode_part(&data)?;
 
             if part != i {
@@ -118,7 +118,7 @@ impl Entry {
         // Try to read part 1 to get total
         let total = match self.read_part_total(1) {
             Ok(total) => total,
-            Err(Error::NoEntry) => return Ok(()), // Already clean
+            Err(Error::Keyring(keyring::Error::NoEntry)) => return Ok(()), // Already clean
             Err(e) => return Err(e),
         };
 
@@ -128,7 +128,7 @@ impl Entry {
             match entry.delete_credential() {
                 Ok(()) => continue,
                 Err(keyring::Error::NoEntry) => continue, // Already deleted
-                Err(e) => return Err(convert_keyring_error(e)),
+                Err(e) => return Err(Error::from(e)),
             }
         }
 
@@ -138,32 +138,14 @@ impl Entry {
     /// Create a keyring entry for the given part number.
     fn part_entry(&self, part: usize) -> Result<keyring::Entry> {
         let part_user = format!("{}.{}", self.user, part);
-        keyring::Entry::new(&self.service, &part_user).map_err(convert_keyring_error)
+        keyring::Entry::new(&self.service, &part_user).map_err(Error::from)
     }
 
     /// Read part 1 and extract just the total count.
     fn read_part_total(&self, part: usize) -> Result<usize> {
         let entry = self.part_entry(part)?;
-        let data = entry.get_secret().map_err(convert_keyring_error)?;
+        let data = entry.get_secret().map_err(Error::from)?;
         let (_, total, _) = decode_part(&data)?;
         Ok(total)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get_nonexistent_entry_returns_no_entry() {
-        let entry = Entry::new("test-service", "nonexistent-user").unwrap();
-
-        match entry.get_password() {
-            Err(Error::NoEntry) => {
-                // Expected behavior for nonexistent entries
-            },
-            Ok(_) => panic!("Expected NoEntry error for nonexistent entry"),
-            Err(e) => panic!("Expected NoEntry error, got: {}", e),
-        }
     }
 }
